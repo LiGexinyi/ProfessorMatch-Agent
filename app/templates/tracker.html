@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}进度追踪 - ProfessorMatch{% endblock %}
+{% block content %}
+<div class="page-container">
+    <div class="page-header">
+        <h1>联系进度追踪</h1>
+        <p>管理您与教授的联系状态</p>
+    </div>
+    <div class="tabs">
+        <button class="tab active" onclick="filterStatus('all')">全部 (<span id="allCount">0</span>)</button>
+        <button class="tab" onclick="filterStatus('pending')">待联系 (<span id="pendingCount">0</span>)</button>
+        <button class="tab" onclick="filterStatus('contacted')">已联系 (<span id="contactedCount">0</span>)</button>
+        <button class="tab" onclick="filterStatus('replied')">已回复 (<span id="repliedCount">0</span>)</button>
+    </div>
+    <div id="trackerList"></div>
+</div>
+<script>
+let allInteractions = [];
+let profMap = new Map();
+
+async function loadTracker() {
+    const intResp = await fetch('/api/professors/user/interactions');
+    allInteractions = await intResp.json();
+    const profResp = await fetch('/api/professors');
+    const profs = await profResp.json();
+    profMap = new Map(profs.map(p => [p.id, p]));
+
+    document.getElementById('allCount').textContent = allInteractions.length;
+    document.getElementById('pendingCount').textContent = allInteractions.filter(i => i.contact_status === 'pending').length;
+    document.getElementById('contactedCount').textContent = allInteractions.filter(i => i.contact_status === 'contacted').length;
+    document.getElementById('repliedCount').textContent = allInteractions.filter(i => i.contact_status === 'replied').length;
+
+    filterStatus('all');
+}
+
+function filterStatus(status) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    event.target.closest('.tab').classList.add('active');
+
+    const filtered = status === 'all' ? allInteractions : allInteractions.filter(i => i.contact_status === status);
+
+    if (!filtered.length) {
+        document.getElementById('trackerList').innerHTML = '<div class="empty-state"><p>暂无记录</p></div>';
+        return;
+    }
+
+    const statusLabels = {pending: '待联系', contacted: '已联系', replied: '已回复'};
+    const statusColors = {pending: 'badge-yellow', contacted: 'badge-blue', replied: 'badge-green'};
+
+    document.getElementById('trackerList').innerHTML = filtered.map(i => {
+        const p = profMap.get(i.professor_id);
+        return `
+            <div class="card tracker-card">
+                <div class="tracker-content">
+                    <div>
+                        <h3>${p?.name || 'Unknown'}</h3>
+                        <p>${p?.university || 'Unknown'}</p>
+                        ${p?.department ? `<span class="badge badge-outline">${p.department}</span>` : ''}
+                    </div>
+                    <div class="status-buttons">
+                        <button class="btn btn-sm ${i.contact_status === 'pending' ? 'btn-primary' : 'btn-outline'}"
+                            onclick="updateStatus(${i.professor_id}, 'pending')">待联系</button>
+                        <button class="btn btn-sm ${i.contact_status === 'contacted' ? 'btn-primary' : 'btn-outline'}"
+                            onclick="updateStatus(${i.professor_id}, 'contacted')">已联系</button>
+                        <button class="btn btn-sm ${i.contact_status === 'replied' ? 'btn-primary' : 'btn-outline'}"
+                            onclick="updateStatus(${i.professor_id}, 'replied')">已回复</button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+async function updateStatus(professorId, status) {
+    await fetch('/api/professors/contact-status', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({professor_id: professorId, contact_status: status}),
+    });
+    loadTracker();
+}
+
+document.addEventListener('DOMContentLoaded', loadTracker);
+</script>
+{% endblock %}

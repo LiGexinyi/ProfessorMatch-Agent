@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}AI 教授信息抓取 - ProfessorMatch{% endblock %}
+{% block content %}
+<div class="page-container">
+    <div class="page-header">
+        <h1>AI 教授信息抓取</h1>
+        <p>输入学校、部门和研究方向，AI 自动搜索并添加相关教授</p>
+    </div>
+    <div class="card">
+        <div class="card-header"><h3>搜索参数</h3></div>
+        <div class="card-body">
+            <div class="form-group">
+                <label>大学名称</label>
+                <input type="text" id="university" class="input-full" placeholder="例如：Stanford University">
+            </div>
+            <div class="form-group">
+                <label>部门名称</label>
+                <input type="text" id="department" class="input-full" placeholder="例如：Computer Science">
+            </div>
+            <div class="form-group">
+                <label>研究方向</label>
+                <input type="text" id="researchArea" class="input-full" placeholder="例如：Machine Learning, AI">
+            </div>
+            <button class="btn btn-primary btn-full" id="searchBtn" onclick="searchProfessors()">搜索教授</button>
+            <div id="scrapeMsg" class="msg hidden"></div>
+        </div>
+    </div>
+    <div id="results" class="hidden">
+        <div class="card" style="margin-top: 1.5rem;">
+            <div class="card-header"><h3 id="resultsTitle">搜索结果</h3></div>
+            <div class="card-body" id="resultsBody"></div>
+        </div>
+    </div>
+</div>
+<script>
+async function searchProfessors() {
+    const university = document.getElementById('university').value.trim();
+    const department = document.getElementById('department').value.trim();
+    const researchArea = document.getElementById('researchArea').value.trim();
+    if (!university || !department || !researchArea) {
+        showMsg('请填写所有字段', 'error');
+        return;
+    }
+    const btn = document.getElementById('searchBtn');
+    btn.disabled = true;
+    btn.textContent = '正在搜索...';
+
+    const resp = await fetch('/api/scraper/fetch', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({university, department, research_area: researchArea}),
+    });
+
+    btn.disabled = false;
+    btn.textContent = '搜索教授';
+
+    if (resp.ok) {
+        const data = await resp.json();
+        document.getElementById('resultsTitle').textContent = `搜索结果 (${data.count} 位教授)`;
+        document.getElementById('resultsBody').innerHTML = data.professors.map(p => `
+            <div class="result-item">
+                <h4>${p.name}</h4>
+                <p><strong>大学：</strong>${p.university}</p>
+                <p><strong>部门：</strong>${p.department}</p>
+                <p><strong>研究方向：</strong>${p.researchAreas}</p>
+                ${p.recentPublications ? `<p><strong>近期论文：</strong>${p.recentPublications}</p>` : ''}
+            </div>
+        `).join('');
+        document.getElementById('results').classList.remove('hidden');
+        showMsg(`成功添加 ${data.count} 位教授`, 'success');
+    } else {
+        showMsg('抓取失败，请重试', 'error');
+    }
+}
+
+function showMsg(text, type) {
+    const msg = document.getElementById('scrapeMsg');
+    msg.textContent = text;
+    msg.className = 'msg msg-' + type;
+    msg.classList.remove('hidden');
+    setTimeout(() => msg.classList.add('hidden'), 3000);
+}
+</script>
+{% endblock %}

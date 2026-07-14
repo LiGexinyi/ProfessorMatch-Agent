@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}教授库 - ProfessorMatch{% endblock %}
+{% block content %}
+<div class="page-container">
+    <div class="page-header">
+        <h1>教授库</h1>
+        <p>浏览和搜索全球顶尖大学的研究导师</p>
+    </div>
+    <div class="search-bar">
+        <input type="text" id="searchInput" placeholder="搜索教授名字、学校或研究方向..." class="input-full">
+    </div>
+    <div id="professorGrid" class="professor-grid"></div>
+    <div id="loading" class="loading hidden">
+        <div class="spinner"></div>
+    </div>
+    <div id="emptyState" class="empty-state hidden">
+        <p>未找到匹配的教授</p>
+    </div>
+</div>
+<script>
+let allProfessors = [];
+let favorites = new Set();
+
+async function loadProfessors() {
+    const resp = await fetch('/api/professors');
+    allProfessors = await resp.json();
+    renderProfessors(allProfessors);
+
+    const favResp = await fetch('/api/professors/user/favorites');
+    const favs = await favResp.json();
+    favs.forEach(f => favorites.add(f.professor_id));
+    renderProfessors(allProfessors);
+}
+
+function renderProfessors(profs) {
+    const grid = document.getElementById('professorGrid');
+    const loading = document.getElementById('loading');
+    const empty = document.getElementById('emptyState');
+    loading.classList.add('hidden');
+
+    if (!profs || profs.length === 0) {
+        grid.innerHTML = '';
+        empty.classList.remove('hidden');
+        return;
+    }
+    empty.classList.add('hidden');
+
+    grid.innerHTML = profs.map(p => `
+        <div class="card professor-card">
+            <div class="card-header">
+                <div class="prof-header">
+                    <div>
+                        <h3 class="prof-name">${p.name}</h3>
+                        <p class="prof-uni">${p.university || ''} ${p.department ? '· ' + p.department : ''}</p>
+                    </div>
+                    <button class="fav-btn ${favorites.has(p.id) ? 'favorited' : ''}"
+                            onclick="toggleFavorite(${p.id})" title="收藏">
+                        ${favorites.has(p.id) ? '&#9829;' : '&#9825;'}
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                ${p.research_areas ? `<div class="prof-section"><h4>研究方向</h4><p>${p.research_areas}</p></div>` : ''}
+                ${p.recent_publications ? `<div class="prof-section"><h4>近期成果</h4><p>${p.recent_publications}</p></div>` : ''}
+                <div class="prof-links">
+                    ${p.homepage_url ? `<a href="${p.homepage_url}" target="_blank" class="btn btn-outline btn-sm">主页</a>` : ''}
+                    ${p.google_scholar_url ? `<a href="${p.google_scholar_url}" target="_blank" class="btn btn-outline btn-sm">Scholar</a>` : ''}
+                </div>
+                <a href="/email?professorId=${p.id}" class="btn btn-primary btn-full">生成套磁邮件</a>
+            </div>
+        </div>
+    `).join('');
+}
+
+async function toggleFavorite(professorId) {
+    const isFav = favorites.has(professorId);
+    await fetch('/api/professors/favorite', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({professor_id: professorId, is_favorited: !isFav}),
+    });
+    if (isFav) favorites.delete(professorId);
+    else favorites.add(professorId);
+    renderProfessors(allProfessors);
+}
+
+document.getElementById('searchInput').addEventListener('input', (e) => {
+    const term = e.target.value.toLowerCase();
+    const filtered = allProfessors.filter(p =>
+        p.name.toLowerCase().includes(term) ||
+        (p.university && p.university.toLowerCase().includes(term)) ||
+        (p.research_areas && p.research_areas.toLowerCase().includes(term))
+    );
+    renderProfessors(filtered);
+});
+
+document.addEventListener('DOMContentLoaded', loadProfessors);
+</script>
+{% endblock %}

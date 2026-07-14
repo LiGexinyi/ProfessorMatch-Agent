@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}收藏夹 - ProfessorMatch{% endblock %}
+{% block content %}
+<div class="page-container">
+    <div class="page-header">
+        <h1>我的收藏</h1>
+        <p id="favCount">管理您收藏的教授</p>
+    </div>
+    <div id="favoritesList"></div>
+    <div id="emptyState" class="empty-state hidden">
+        <h3>暂无收藏</h3>
+        <p>浏览教授并点击心形图标来收藏您感兴趣的教授</p>
+        <a href="/professors" class="btn btn-primary">浏览教授</a>
+    </div>
+</div>
+<script>
+async function loadFavorites() {
+    const favResp = await fetch('/api/professors/user/favorites');
+    const favs = await favResp.json();
+    if (!favs.length) {
+        document.getElementById('emptyState').classList.remove('hidden');
+        return;
+    }
+    const profResp = await fetch('/api/professors');
+    const profs = await profResp.json();
+    const profMap = new Map(profs.map(p => [p.id, p]));
+
+    document.getElementById('favCount').textContent = `您已收藏 ${favs.length} 位教授`;
+
+    document.getElementById('favoritesList').innerHTML = favs.map(f => {
+        const p = profMap.get(f.professor_id);
+        if (!p) return '';
+        return `
+            <div class="card fav-card">
+                <div class="fav-content">
+                    <div>
+                        <h3>${p.name} <span class="heart-icon">&#9829;</span></h3>
+                        <p><strong>学校：</strong>${p.university || 'Unknown'}</p>
+                        ${p.department ? `<p><strong>部门：</strong>${p.department}</p>` : ''}
+                        ${p.research_areas ? `<p><strong>研究方向：</strong>${p.research_areas}</p>` : ''}
+                    </div>
+                    <div class="fav-actions">
+                        <a href="/email?professorId=${p.id}" class="btn btn-primary btn-sm">生成邮件</a>
+                        <button class="btn btn-outline btn-sm" onclick="removeFav(${p.id})">移除</button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+async function removeFav(professorId) {
+    await fetch('/api/professors/favorite', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({professor_id: professorId, is_favorited: false}),
+    });
+    loadFavorites();
+}
+
+document.addEventListener('DOMContentLoaded', loadFavorites);
+</script>
+{% endblock %}

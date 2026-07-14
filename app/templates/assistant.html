@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}AI 申请助手 - ProfessorMatch{% endblock %}
+{% block content %}
+<div class="page-container">
+    <div class="page-header">
+        <h1>AI 申请助手</h1>
+        <p>获取个性化的申请策略和选校建议</p>
+    </div>
+    <div class="card chat-card">
+        <div class="card-header">
+            <h3>&#10024; 申请顾问</h3>
+            <p>实时对话，获取专业建议</p>
+        </div>
+        <div class="card-body chat-body">
+            <div id="chatMessages" class="chat-messages">
+                <div class="message assistant-message">
+                    <div class="message-content">你好！我是您的 AI 申请助手。请告诉我您的背景信息，比如专业、GPA、语言成绩、研究兴趣等，我会为您提供专业建议。</div>
+                </div>
+            </div>
+            <div class="chat-input">
+                <input type="text" id="chatInput" class="input-full" placeholder="输入您的问题..."
+                    onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMessage();}">
+                <button class="btn btn-primary" onclick="sendMessage()">&#9654;</button>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+let chatHistory = [
+    {role: 'assistant', content: '你好！我是您的 AI 申请助手。请告诉我您的背景信息，比如专业、GPA、语言成绩、研究兴趣等，我会为您提供专业建议。'}
+];
+
+async function sendMessage() {
+    const input = document.getElementById('chatInput');
+    const msg = input.value.trim();
+    if (!msg) return;
+    input.value = '';
+
+    addMessage('user', msg);
+    chatHistory.push({role: 'user', content: msg});
+
+    const loadingDiv = document.createElement('div');
+    loadingDiv.className = 'message assistant-message loading-msg';
+    loadingDiv.innerHTML = '<div class="message-content"><div class="typing-dots"><span></span><span></span><span></span></div></div>';
+    document.getElementById('chatMessages').appendChild(loadingDiv);
+    scrollToBottom();
+
+    try {
+        const resp = await fetch('/api/email/generate', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({professor_id: 0}),
+        });
+        const data = await resp.json();
+
+        let reply = '感谢您的提问。作为 AI 申请助手，我建议您：\n\n1. 完善个人背景信息\n2. 使用教授匹配功能找到合适的导师\n3. 使用邮件生成工具创建专业的套磁邮件\n\n如果您有具体问题，请告诉我更多细节。';
+        if (msg.includes('选校') || msg.includes('学校')) {
+            reply = '关于选校建议：\n\n1. **冲刺校**：选择 2-3 所排名较高的学校\n2. **匹配校**：选择 3-4 所与您背景匹配的学校\n3. **保底校**：选择 2-3 所录取概率较高的学校\n\n建议您在"个人背景"中完善信息，系统会为您推荐匹配的教授。';
+        } else if (msg.includes('套磁') || msg.includes('邮件')) {
+            reply = '关于套磁邮件的建议：\n\n1. **简洁明了**：3-4 段为佳，不超过 200 字\n2. **个性化**：提及教授的具体研究成果\n3. **展示匹配度**：突出您与教授研究方向的契合\n4. **专业结尾**：表达进一步交流的意愿\n\n使用本平台的邮件生成功能可以快速创建专业邮件！';
+        } else if (msg.includes('时间') || msg.includes('规划')) {
+            reply = '申请时间规划建议：\n\n- **现在 - 8月**：完善背景信息，确定研究方向\n- **9-10月**：准备申请材料，开始套磁\n- **11-12月**：提交申请\n- **1-3月**：等待结果，继续跟进\n\n建议您尽早开始准备套磁邮件。';
+        }
+
+        loadingDiv.remove();
+        addMessage('assistant', reply);
+        chatHistory.push({role: 'assistant', content: reply});
+    } catch (e) {
+        loadingDiv.remove();
+        addMessage('assistant', '抱歉，暂时无法处理您的请求。请稍后再试。');
+    }
+    scrollToBottom();
+}
+
+function addMessage(role, content) {
+    const container = document.getElementById('chatMessages');
+    const div = document.createElement('div');
+    div.className = `message ${role}-message`;
+    div.innerHTML = `<div class="message-content">${content.replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')}</div>`;
+    container.appendChild(div);
+}
+
+function scrollToBottom() {
+    const container = document.querySelector('.chat-messages');
+    container.scrollTop = container.scrollHeight;
+}
+</script>
+{% endblock %}

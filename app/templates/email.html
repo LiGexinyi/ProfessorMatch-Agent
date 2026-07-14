@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+{% block title %}套磁邮件编辑器 - ProfessorMatch{% endblock %}
+{% block content %}
+<div class="page-container">
+    <div class="page-header">
+        <h1>套磁邮件编辑器</h1>
+        <p>编辑、优化和完善您的套磁邮件</p>
+    </div>
+    <div class="tabs">
+        <button class="tab active" onclick="switchTab('compose')">编辑邮件</button>
+        <button class="tab" onclick="switchTab('optimize')">优化建议</button>
+    </div>
+
+    <div id="composeTab" class="tab-content">
+        <div class="card">
+            <div class="card-header"><h3>邮件内容</h3></div>
+            <div class="card-body">
+                <div class="form-group">
+                    <label>主题</label>
+                    <input type="text" id="emailSubject" class="input-full" placeholder="输入邮件主题">
+                </div>
+                <div class="form-group">
+                    <label>邮件正文</label>
+                    <textarea id="emailBody" class="input-full" rows="15" placeholder="输入邮件正文"></textarea>
+                </div>
+                <div class="btn-group">
+                    <button class="btn btn-primary" id="generateBtn" onclick="generateEmail()">AI 生成邮件</button>
+                    <button class="btn btn-outline" onclick="copyEmail()">复制</button>
+                    <button class="btn btn-outline" onclick="downloadEmail()">下载</button>
+                    <button class="btn btn-success hidden" id="saveBtn" onclick="saveEmail()">保存</button>
+                </div>
+                <div id="emailMsg" class="msg hidden"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="optimizeTab" class="tab-content hidden">
+        <div class="card">
+            <div class="card-header"><h3>AI 优化建议</h3></div>
+            <div class="card-body">
+                <div class="form-group">
+                    <label>优化重点</label>
+                    <div class="btn-group">
+                        <button class="btn btn-outline focus-btn active" data-area="tone">语气</button>
+                        <button class="btn btn-outline focus-btn" data-area="structure">结构</button>
+                        <button class="btn btn-outline focus-btn" data-area="personalization">个性化</button>
+                        <button class="btn btn-outline focus-btn" data-area="professionalism">专业性</button>
+                    </div>
+                </div>
+                <button class="btn btn-primary btn-full" onclick="optimizeEmail()">获取优化建议</button>
+                <div id="suggestions" class="suggestions-list"></div>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+let currentDraftId = null;
+let selectedFocusArea = 'tone';
+
+const params = new URLSearchParams(window.location.search);
+const professorId = params.get('professorId');
+const draftId = params.get('draftId');
+
+document.querySelectorAll('.focus-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+        document.querySelectorAll('.focus-btn').forEach(b => b.classList.remove('active'));
+        e.target.classList.add('active');
+        selectedFocusArea = e.target.dataset.area;
+    });
+});
+
+function switchTab(tab) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+    document.querySelector(`.tab:nth-child(${tab === 'compose' ? 1 : 2})`).classList.add('active');
+    document.getElementById(tab + 'Tab').classList.remove('hidden');
+}
+
+function showMsg(text, type) {
+    const msg = document.getElementById('emailMsg');
+    msg.textContent = text;
+    msg.className = 'msg msg-' + type;
+    msg.classList.remove('hidden');
+    setTimeout(() => msg.classList.add('hidden'), 3000);
+}
+
+async function generateEmail() {
+    if (!professorId) return;
+    const btn = document.getElementById('generateBtn');
+    btn.disabled = true;
+    btn.textContent = '生成中...';
+
+    const resp = await fetch('/api/email/generate', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({professor_id: parseInt(professorId)}),
+    });
+
+    btn.disabled = false;
+    btn.textContent = 'AI 生成邮件';
+
+    if (resp.ok) {
+        const data = await resp.json();
+        document.getElementById('emailSubject').value = data.subject || '';
+        document.getElementById('emailBody').value = data.body || '';
+        currentDraftId = data.id;
+        document.getElementById('saveBtn').classList.remove('hidden');
+        showMsg('邮件已生成', 'success');
+    } else {
+        showMsg('生成失败，请重试', 'error');
+    }
+}
+
+async function saveEmail() {
+    if (!currentDraftId) return;
+    const resp = await fetch('/api/email/update', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            draft_id: currentDraftId,
+            subject: document.getElementById('emailSubject').value,
+            body: document.getElementById('emailBody').value,
+        }),
+    });
+    showMsg(resp.ok ? '已保存' : '保存失败', resp.ok ? 'success' : 'error');
+}
+
+async function optimizeEmail() {
+    if (!currentDraftId) {
+        showMsg('请先生成邮件', 'error');
+        return;
+    }
+    const resp = await fetch('/api/email/optimize', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({draft_id: currentDraftId, focus_area: selectedFocusArea}),
+    });
+    if (resp.ok) {
+        const data = await resp.json();
+        const container = document.getElementById('suggestions');
+        container.innerHTML = '<h4>建议：</h4>' +
+            (data.suggestions || []).map(s => `<div class="suggestion-item">${s}</div>`).join('');
+        if (data.improvedEmail) {
+            document.getElementById('emailSubject').value = data.improvedEmail.subject || '';
+            document.getElementById('emailBody').value = data.improvedEmail.body || '';
+        }
+    }
+}
+
+function copyEmail() {
+    const text = `Subject: ${document.getElementById('emailSubject').value}\n\n${document.getElementById('emailBody').value}`;
+    navigator.clipboard.writeText(text);
+    showMsg('已复制到剪贴板', 'success');
+}
+
+function downloadEmail() {
+    const text = `Subject: ${document.getElementById('emailSubject').value}\n\n${document.getElementById('emailBody').value}`;
+    const blob = new Blob([text], {type: 'text/plain'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'email.txt';
+    a.click();
+    showMsg('邮件已下载', 'success');
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    if (professorId) generateEmail();
+    if (draftId) {
+        currentDraftId = parseInt(draftId);
+        document.getElementById('saveBtn').classList.remove('hidden');
+    }
+});
+</script>
+{% endblock %}
